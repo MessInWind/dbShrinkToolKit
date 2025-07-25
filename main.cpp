@@ -46,6 +46,7 @@ void map_db_shrink() {
 
     char *dbPath = "map.db";
     char *dbPathShrink = "map_shrink.db";
+    char *dbFloorPath = "floor.db";
 
     // key = x, y, s, b
     // val = oid
@@ -54,6 +55,7 @@ void map_db_shrink() {
     uint32_t recordSizeBytes = 20;
     uint32_t recordBuffer[5] = { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 };
     uint32_t recordBufferGet[5] = { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 };
+    uint32_t recordBufferGetFloor[3] = { 0x00000000, 0x00000000, 0x00000000 };
     unsigned char headerBuffer[ LINEARDB3_HEADER_SIZE ];
 
     LINEARDB3 *db = new LINEARDB3();
@@ -63,6 +65,15 @@ void map_db_shrink() {
         0,
         8000,
         16,
+        4
+    );
+    LINEARDB3 *dbFloor = new LINEARDB3();
+    LINEARDB3_open(
+        dbFloor,
+        dbFloorPath,
+        0,
+        8000,
+        8,
         4
     );
     FILE *originFile = fopen( dbPath, "r+b" );
@@ -101,12 +112,22 @@ void map_db_shrink() {
         }
 
         if (recordBuffer[2] == 0 && recordBuffer[3] == 0) { // 主物品
-            // 主物品非0
-            if (recordBuffer[4] != 0) {
+            if (recordBuffer[4] != 0) { // 主物品非0
                 numWritten = fwrite( recordBuffer, recordSizeBytes, 1, shrinkFile );
                 if( numWritten != 1 ) {
                     printf( "Failed to record to temp lineardb3 truncation file\n" );
                     return;
+                }
+            } else { // 有地板, 保留
+                recordBufferGetFloor[0] = recordBuffer[0];
+                recordBufferGetFloor[1] = recordBuffer[1];
+                int result = LINEARDB3_get( dbFloor, &recordBufferGetFloor[0], &recordBufferGetFloor[2] );
+                if (result == 0) {
+                    numWritten = fwrite( recordBuffer, recordSizeBytes, 1, shrinkFile );
+                    if( numWritten != 1 ) {
+                        printf( "Failed to record to temp lineardb3 truncation file\n" );
+                        return;
+                    }
                 }
             }
         } else { // 子物品, 其他属性
@@ -130,6 +151,7 @@ void map_db_shrink() {
     fclose( originFile );
     fclose( shrinkFile );
     LINEARDB3_close( db );
+    LINEARDB3_close( dbFloor );
 }
 
 /**
@@ -145,10 +167,23 @@ void map_time_db_shrink() {
 
     printf( "Generating Shrinked database...\n" );
 
+    char *dbFloorPath = "floor.db";
+
     uint32_t recordSizeBytes = 24;
     uint32_t recordBuffer[6] = { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 };
+    uint32_t recordBufferGetFloor[3] = { 0x00000000, 0x00000000, 0x00000000 };
     unsigned char headerBuffer[ LINEARDB3_HEADER_SIZE ];
 
+    LINEARDB3 *dbFloor = new LINEARDB3();
+    LINEARDB3_open(
+        dbFloor,
+        dbFloorPath,
+        0,
+        8000,
+        8,
+        4
+    );
+    
     FILE *originFile = fopen( "mapTime.db", "r+b" );
     if ( originFile == NULL ) {
         printf( "Error opening originFile\n" );
@@ -190,11 +225,23 @@ void map_time_db_shrink() {
                 printf( "Failed to record to temp lineardb3 truncation file\n" );
                 return;
             }
+        } else { // 有地板, 保留
+            recordBufferGetFloor[0] = recordBuffer[0];
+            recordBufferGetFloor[1] = recordBuffer[1];
+            int result = LINEARDB3_get( dbFloor, &recordBufferGetFloor[0], &recordBufferGetFloor[2] );
+            if (result == 0) {
+                numWritten = fwrite( recordBuffer, recordSizeBytes, 1, shrinkFile );
+                if( numWritten != 1 ) {
+                    printf( "Failed to record to temp lineardb3 truncation file\n" );
+                    return;
+                }
+            }
         }
     }
 
     fclose( originFile );
     fclose( shrinkFile );
+    LINEARDB3_close( dbFloor );
 }
 
 void map_time_db_test() {
